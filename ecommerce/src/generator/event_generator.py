@@ -9,8 +9,10 @@ from faker import Faker
 # Initialize Faker
 fake = Faker()
 
+import os
+
 # Kafka Configuration
-BOOTSTRAP_SERVERS = ['localhost:29092']  # Using the host-accessible port
+BOOTSTRAP_SERVERS = [os.getenv('KAFKA_BROKER', 'localhost:29092')]  # Env var for Docker, default for Local
 TOPIC_NAME = 'ecommerce-topic'
 
 def get_producer():

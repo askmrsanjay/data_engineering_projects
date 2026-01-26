@@ -5,19 +5,20 @@ __pycache__/
 .venv/
 env/
 venv/
-ENV/
 
-# Spark/Iceberg
-warehouse/
-checkpoints/
-spark-warehouse/
-*.csv
-
-# Docker/Jenkins
-jenkins_home/
-.docker/
-*.log
-
-# IDEs
+# IDE / Editor
 .vscode/
 .idea/
+
+# Docker Volumes & Secrets
+ecommerce_docker/jenkins_home/
+ecommerce_docker/sales_data/
+ecommerce_docker/postgres-data/
+
+# Checkpoints & Logs
+.ipynb_checkpoints/
+logs/
+*.log
+
+# Generated Data
+gold_sales_dashboard.csv

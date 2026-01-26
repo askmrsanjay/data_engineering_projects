@@ -121,3 +121,29 @@ services:
       - ./jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock # Allows Jenkins to run docker commands
       - ..:/opt/bitnami/spark/app
+
+  event-generator:
+    image: python:3.9-slim
+    container_name: ecommerce-event-generator
+    depends_on:
+      - kafka
+    volumes:
+      - ..:/app
+    working_dir: /app
+    environment:
+      - KAFKA_BROKER=kafka:9092
+    command: >
+      sh -c "pip install kafka-python faker && python src/generator/event_generator.py"
+    restart: always
+
+  dashboard:
+    image: python:3.9-slim
+    container_name: ecommerce-dashboard
+    volumes:
+      - ..:/app
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    command: >
+      sh -c "pip install streamlit pandas plotly && streamlit run src/visualization/dashboard.py"
+    restart: always

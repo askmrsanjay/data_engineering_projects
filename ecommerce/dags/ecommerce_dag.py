@@ -16,7 +16,7 @@ with DAG(
     'ecommerce_medallion_pipeline',
     default_args=default_args,
     description='Orchestrate E-commerce Medallion Pipeline',
-    schedule_interval=timedelta(days=1),
+    schedule_interval=timedelta(hours=1),
     catchup=False,
     tags=['ecommerce', 'iceberg'],
 ) as dag:
@@ -25,6 +25,16 @@ with DAG(
     check_kafka = BashOperator(
         task_id='check_kafka_connectivity',
         bash_command='echo "Checking Kafka..."; sleep 2', # In real scenario, use a connectivity script
+    )
+
+    # 2. Trigger Silver Processing (Batch/Stream)
+    trigger_silver_job = BashOperator(
+        task_id='trigger_silver_processing',
+        bash_command="""
+            docker exec ecommerce-spark-master spark-submit \
+            --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 \
+            /opt/bitnami/spark/app/src/streaming/silver_transformation.py
+        """,
     )
 
     # 3. Trigger Silver Quality Validation (Great Expectations)

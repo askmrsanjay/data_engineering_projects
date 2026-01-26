@@ -53,7 +53,7 @@ class TestMedallionTransformations(unittest.TestCase):
         # Check manual filtering
         valid_df = processed_df.filter(col("price") >= 0)
         
-        self.assertEqual(valid_df.count(), 2) # Note: our logic doesn't drop negatives yet, just fills nulls
+        self.assertEqual(valid_df.count(), 1) # Filter removed the negative value
         print("✅ CI/CD Test: Logical checks passed.")
 
 if __name__ == "__main__":

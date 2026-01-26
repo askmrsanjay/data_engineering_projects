@@ -14,14 +14,14 @@ pipeline {
             steps {
                 echo 'Checking out code...'
                 // Code is already volume-mounted in our demo setup
-                sh "ls -R ${PROJECT_ROOT}"
+                sh "ls -F ${PROJECT_ROOT}"
             }
         }
 
         stage('Build & Lint') {
             steps {
                 echo 'Checking python environment...'
-                sh "python3 --version"
+                sh "docker exec ecommerce-spark-master python3 --version"
             }
         }
 
@@ -29,7 +29,7 @@ pipeline {
             steps {
                 echo 'Running Medallion Pipeline Logic Tests...'
                 // We run the tests inside the Spark Master container where Spark is installed
-                sh "docker exec ecommerce-spark-master python3 ${PROJECT_ROOT}/tests/test_pipeline.py"
+                sh "docker exec -e PYTHONPATH=/opt/bitnami/spark/python/lib/py4j-0.10.9.5-src.zip:/opt/bitnami/spark/python/:/opt/bitnami/spark/app ecommerce-spark-master python3 ${PROJECT_ROOT}/tests/test_pipeline.py"
             }
         }
 
