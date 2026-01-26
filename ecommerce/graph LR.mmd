@@ -1,0 +1,33 @@
+graph LR
+    subgraph Source
+        G[Event Generator] -->|Produces| K[Kafka]
+    end
+
+    subgraph "Stream Processing (Bronze)"
+        K -->|Spark Streaming| B[MinIO / Iceberg - Bronze]
+    end
+
+    subgraph "Processing (Silver/Gold)"
+        B -->|Spark| S[MinIO / Iceberg - Silver]
+        S -->|Spark| Go[MinIO / Iceberg - Gold]
+    end
+
+    subgraph Visualization
+        Go -->|Query| SL[Streamlit BI Dashboard]
+    end
+
+    subgraph Orchestration
+        A[Airflow] -.->|Triggers| B
+        A -.->|Triggers| S
+        A -.->|Triggers| Go
+    end
+
+    subgraph Quality
+        GE[Great Expectations] -.->|Validates| S
+        GE -.->|Validates| Go
+    end
+
+    subgraph Monitoring
+        P[Prometheus] --> M[Grafana]
+        Spark[Spark UI] --> M
+    end

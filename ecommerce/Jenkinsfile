@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+
+    environment {
+        PROJECT_ROOT = "/opt/bitnami/spark/app"
+    }
+
+    triggers {
+        pollSCM('* * * * *') // Check for changes every minute
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out code...'
+                // Code is already volume-mounted in our demo setup
+                sh "ls -R ${PROJECT_ROOT}"
+            }
+        }
+
+        stage('Build & Lint') {
+            steps {
+                echo 'Checking python environment...'
+                sh "python3 --version"
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                echo 'Running Medallion Pipeline Logic Tests...'
+                // We run the tests inside the Spark Master container where Spark is installed
+                sh "docker exec ecommerce-spark-master python3 ${PROJECT_ROOT}/tests/test_pipeline.py"
+            }
+        }
+
+        stage('Data Quality Audit') {
+            steps {
+                echo 'Running Great Expectations Audit...'
+                sh "docker exec ecommerce-spark-master spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 ${PROJECT_ROOT}/src/quality/silver_quality.py"
+            }
+        }
+
+        stage('Governance Check') {
+            steps {
+                echo 'Running Iceberg Table Maintenance...'
+                sh "docker exec ecommerce-spark-master spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 ${PROJECT_ROOT}/src/utils/iceberg_governance.py"
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Pipeline Finalized.'
+        }
+        success {
+            echo '🏆 Project is healthy and ready for deployment!'
+        }
+        failure {
+            echo '❌ Pipeline failed! Check logs for regressions.'
+        }
+    }
+}

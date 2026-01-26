@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Spark/Iceberg
+warehouse/
+checkpoints/
+spark-warehouse/
+*.csv
+
+# Docker/Jenkins
+jenkins_home/
+.docker/
+*.log
+
+# IDEs
+.vscode/
+.idea/
