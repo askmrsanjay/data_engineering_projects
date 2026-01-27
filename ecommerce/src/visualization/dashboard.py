@@ -20,19 +20,13 @@ def main():
     refresh_rate = st.sidebar.slider("Auto-refresh (seconds)", 5, 60, 10)
     
     # Check if the data file exists
-    csv_path = "gold_sales_dashboard.csv"
+    # We now support Real-Time data from the Silver Streaming job
+    csv_path = "realtime_sales_update.csv"
     
     if not os.path.exists(csv_path):
-        st.error(f"Waiting for data... (File '{csv_path}' not found)")
-        st.info("The Gold Batch job needs to run once to generate the dashboard data.")
-        
-        # Add a trigger button for convenience
-        if st.button("Trigger Gold Job (via Spark Container)"):
-            st.warning("Triggering... please wait.")
-            # In a real app, you'd call an API. Here we just give instructions.
-            st.code("docker exec ecommerce-spark-master spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 /opt/bitnami/spark/app/src/batch/gold_batch.py")
-        
-        time.sleep(refresh_rate)
+        st.warning("Waiting for Real-Time data stream...")
+        st.info("The streaming job (silver_transformation.py) creates this file.")
+        time.sleep(5)
         st.rerun()
         return
 
@@ -43,20 +37,23 @@ def main():
     chart_col1, chart_col2 = st.columns(2)
 
     try:
-        # Load Data from CSV (No Spark needed on host!)
-        pd_df = pd.read_csv(csv_path)
+        # Load Data from CSV (Raw Transactions)
+        # Columns: event_timestamp, category, price, user_id
+        pd_df = pd.read_csv(csv_path, names=["event_timestamp", "category", "price", "user_id"])
 
         if pd_df.empty:
-            st.warning("No data found in the Gold layer yet.")
+            st.warning("Data stream is empty. Waiting for events...")
+            time.sleep(5)
+            st.rerun()
             return
 
-        # 1. KPI Metrics
-        total_revenue = pd_df["total_revenue"].sum()
-        total_transactions = pd_df["total_transactions"].sum()
-        unique_buyers = pd_df["unique_buyers"].sum()
+        # 1. KPI Metrics (Aggregated on the fly)
+        total_revenue = pd_df["price"].sum()
+        total_transactions = len(pd_df)
+        unique_buyers = pd_df["user_id"].nunique()
 
         with metric_col1:
-            st.metric("Total Revenue", f"${total_revenue:,.2f}")
+            st.metric("Live Revenue", f"${total_revenue:,.2f}", delta="Real-Time")
         with metric_col2:
             st.metric("Total Transactions", f"{total_transactions:,}")
         with metric_col3:
@@ -64,11 +61,11 @@ def main():
 
         # 2. Revenue by Category (Bar Chart)
         with chart_col1:
-            st.subheader("Revenue by Category")
+            st.subheader("Live Revenue by Category")
             fig_category = px.bar(
-                pd_df.groupby("category")["total_revenue"].sum().reset_index(),
+                pd_df.groupby("category")["price"].sum().reset_index(),
                 x="category",
-                y="total_revenue",
+                y="price",
                 color="category",
                 template="plotly_dark",
                 color_discrete_sequence=px.colors.qualitative.Vivid
@@ -76,29 +73,19 @@ def main():
             fig_category.update_layout(showlegend=False)
             st.plotly_chart(fig_category, use_container_width=True)
 
-        # 3. Revenue Trend (Line Chart)
+        # 3. Recent Transactions Table (Instead of Trend)
         with chart_col2:
-            st.subheader("Hourly Revenue Trend")
-            pd_df['hour_start'] = pd.to_datetime(pd_df['hour_start'])
-            trend_df = pd_df.groupby("hour_start")["total_revenue"].sum().reset_index()
-            fig_trend = px.line(
-                trend_df.sort_values("hour_start"),
-                x="hour_start",
-                y="total_revenue",
-                markers=True,
-                template="plotly_dark"
+            st.subheader("Latest Transactions")
+            st.dataframe(
+                pd_df.sort_values("event_timestamp", ascending=False).head(10)[["event_timestamp", "category", "price", "user_id"]],
+                use_container_width=True
             )
-            st.plotly_chart(fig_trend, use_container_width=True)
-
-        # Raw Data Table
-        st.subheader("Recent Sales Aggregates")
-        st.dataframe(pd_df.sort_values("hour_start", ascending=False), use_container_width=True)
 
     except Exception as e:
         st.error(f"Error loading dashboard data: {e}")
 
-    # Simple auto-refresh
-    time.sleep(refresh_rate)
+    # Aggressive auto-refresh for Real-Time feel
+    time.sleep(2)
     st.rerun()
 
 if __name__ == "__main__":

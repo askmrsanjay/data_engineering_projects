@@ -80,10 +80,12 @@ services:
   airflow:
     image: apache/airflow:2.7.1
     container_name: ecommerce-airflow
+    user: root
     depends_on:
       - postgres
     volumes:
       - ../dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor

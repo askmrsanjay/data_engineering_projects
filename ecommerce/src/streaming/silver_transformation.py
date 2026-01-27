@@ -40,14 +40,33 @@ def run_silver_transformation():
 
     # 3. Write to Silver Table (Iceberg)
     # Using 'toTable' ensures the table is created if it doesn't exist
+    # 3. Define Micro-Batch Function
+    def process_batch(batch_df, batch_id):
+        print(f"Processing Batch {batch_id} with {batch_df.count()} records")
+        
+        # A. Write to Iceberg (Storage)
+        batch_df.write \
+            .format("iceberg") \
+            .mode("append") \
+            .save("demo.default.silver_events")
+            
+        # B. Write to CSV (Dashboard "Real-Time" View)
+        # We overwrite this file every few seconds so the dashboard sees the latest "Pulse"
+        # We filter for purchases only to keep it exciting
+        sales_df = batch_df.filter(col("event_type") == "purchase")
+        if sales_df.count() > 0:
+            sales_df.select(col("event_timestamp").cast("string"), "category", "price", "user_id") \
+                .toPandas() \
+                .to_csv("/opt/bitnami/spark/app/realtime_sales_update.csv", mode='a', header=False, index=False)
+                
+    # 4. Start Streaming Query
     query = silver_df.writeStream \
-        .format("iceberg") \
-        .outputMode("append") \
-        .trigger(processingTime="20 seconds") \
-        .option("checkpointLocation", "s3a://ecommerce-bucket/checkpoints/silver_events") \
-        .toTable("demo.default.silver_events")
+        .foreachBatch(process_batch) \
+        .trigger(processingTime="5 seconds") \
+        .option("checkpointLocation", "s3a://ecommerce-bucket/checkpoints/silver_events_v2") \
+        .start()
 
-    print("Transformation running... Writing to demo.default.silver_events")
+    print("Real-Time Silver Transformation Started...")
     query.awaitTermination()
 
 if __name__ == "__main__":
