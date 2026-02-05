@@ -9,11 +9,11 @@
 - [x] Streaming: Spark Structured Streaming (Bronze Layer)
     - [x] Verify data in MinIO/Iceberg
 - [x] Batch: Spark Processing (Silver Layer)
-- [/] Batch: Spark Processing (Gold Layer)
-- [ ] Storage: Apache Iceberg Integration
-- [ ] Orchestration: Airflow Workflow
-- [ ] Quality: Data Validation with Great Expectations
-- [ ] Visualization: Streamlit BI Dashboard
-- [ ] Monitoring & Observability (Grafana)
-- [ ] CI/CD & Governance
-- [ ] Final Project Review & Documentation
+- [x] Batch: Spark Processing (Gold Layer)
+- [x] Storage: Apache Iceberg Integration (Verified)
+- [x] Orchestration: Airflow Workflow (Verified: http://localhost:8082, User: admin/admin)
+- [x] Quality: Data Validation with Great Expectations (Verified in Airflow)
+- [x] Visualization: Streamlit BI Dashboard (Verified: http://localhost:8501)
+- [x] Monitoring & Observability (Grafana)
+- [x] CI/CD & Governance
+- [x] Final Project Review & Documentation

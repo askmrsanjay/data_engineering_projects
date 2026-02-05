@@ -1,5 +1,6 @@
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.providers.docker.operators.docker import DockerOperator
+from docker.types import Mount
 from datetime import datetime, timedelta
 
 default_args = {
@@ -21,40 +22,56 @@ with DAG(
     tags=['ecommerce', 'iceberg'],
 ) as dag:
 
-    # 1. Check Kafka Connectivity (Diagnostic)
-    check_kafka = BashOperator(
-        task_id='check_kafka_connectivity',
-        bash_command='echo "Checking Kafka..."; sleep 2', # In real scenario, use a connectivity script
+    # 1. Trigger Silver Batch
+    trigger_silver = DockerOperator(
+        task_id='trigger_silver_batch',
+        image='bitnami/spark:3',
+        container_name='airflow_spark_submit_silver',
+        api_version='auto',
+        auto_remove=True,
+        command="spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 /opt/bitnami/spark/app/src/batch/silver_batch.py",
+        docker_url="unix://var/run/docker.sock",
+        network_mode="ecommerce_docker_default",
+        mounts=[Mount(source="/d/Projects/data_engineering_projects/ecommerce", target="/opt/bitnami/spark/app", type="bind")],
+        environment={
+            'SPARK_MODE': 'worker',
+            'SPARK_MASTER_URL': 'spark://ecommerce-spark-master:7077'
+        }
     )
 
-    # 2. Trigger Silver Processing (Batch/Stream)
-    trigger_silver_job = BashOperator(
-        task_id='trigger_silver_processing',
-        bash_command="""
-            docker exec ecommerce-spark-master spark-submit \
-            --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 \
-            /opt/bitnami/spark/app/src/streaming/silver_transformation.py
-        """,
+    # 2. Key Step: Great Expectations (Optional for now, but good to have)
+    # We will trigger the same container image but run the quality script
+    trigger_quality = DockerOperator(
+        task_id='trigger_quality_check',
+        image='bitnami/spark:3',
+        container_name='airflow_spark_submit_quality',
+        api_version='auto',
+        auto_remove=True,
+        command='bash -c "export HOME=/tmp && pip install --user great_expectations==0.18.3 && export PYTHONPATH=$PYTHONPATH:/tmp/.local/lib/python3.8/site-packages && spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 /opt/bitnami/spark/app/src/quality/silver_quality.py"',
+        docker_url="unix://var/run/docker.sock",
+        network_mode="ecommerce_docker_default",
+        mounts=[Mount(source="/d/Projects/data_engineering_projects/ecommerce", target="/opt/bitnami/spark/app", type="bind")],
+         environment={
+            'SPARK_MODE': 'worker',
+            'SPARK_MASTER_URL': 'spark://ecommerce-spark-master:7077'
+        }
     )
 
-    # 3. Trigger Silver Quality Validation (Great Expectations)
-    trigger_quality_check = BashOperator(
-        task_id='trigger_silver_quality',
-        bash_command="""
-            docker exec ecommerce-spark-master spark-submit \
-            --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 \
-            /opt/bitnami/spark/app/src/quality/silver_quality.py
-        """,
-    )
-
-    # 4. Trigger Gold Layer Aggregations (Batch)
-    trigger_gold_job = BashOperator(
+    # 3. Trigger Gold Batch
+    trigger_gold = DockerOperator(
         task_id='trigger_gold_batch',
-        bash_command="""
-            docker exec ecommerce-spark-master spark-submit \
-            --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 \
-            /opt/bitnami/spark/app/src/batch/gold_batch.py
-        """,
+        image='bitnami/spark:3',
+        container_name='airflow_spark_submit_gold',
+        api_version='auto',
+        auto_remove=True,
+        command='bash -c "export HOME=/tmp && pip install --user pandas pyarrow && export PYTHONPATH=$PYTHONPATH:/tmp/.local/lib/python3.8/site-packages && spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 /opt/bitnami/spark/app/src/batch/gold_batch.py"',
+        docker_url="unix://var/run/docker.sock",
+        network_mode="ecommerce_docker_default",
+        mounts=[Mount(source="/d/Projects/data_engineering_projects/ecommerce", target="/opt/bitnami/spark/app", type="bind")],
+         environment={
+            'SPARK_MODE': 'worker',
+            'SPARK_MASTER_URL': 'spark://ecommerce-spark-master:7077'
+        }
     )
 
-    check_kafka >> trigger_silver_job >> trigger_quality_check >> trigger_gold_job
+    trigger_silver >> trigger_quality >> trigger_gold

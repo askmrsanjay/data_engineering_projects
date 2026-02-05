@@ -32,61 +32,67 @@ def run_quality_checks():
         # 2. Setup GE Context
         context = gx.get_context()
         
-        # 3. Create a Data Source and Asset
+        # 3. Create a Data Source and Asset (Fluent API for GX 0.18)
         datasource_name = "spark_ds_v4"
-        datasource = context.data_sources.add_spark(name=datasource_name)
+        # Use context.sources instead of context.data_sources
+        datasource = context.sources.add_spark(name=datasource_name)
         
         data_asset_name = "silver_data_asset_v4"
-        data_asset = datasource.add_dataframe_asset(name=data_asset_name)
+        asset = datasource.add_dataframe_asset(name=data_asset_name)
         
-        # 4. Create a Batch Definition
-        batch_definition_name = "all_silver_batch"
-        batch_definition = data_asset.add_batch_definition_whole_dataframe(name=batch_definition_name)
-
-        # 5. Create Expectation Suite
+        # Build Batch Request passing the DataFrame
+        batch_request = asset.build_batch_request(dataframe=silver_df)
+        
+        # 4. Create and Configure Expectation Suite using Validator
         suite_name = "silver_suite_v4"
-        suite = context.suites.add(gx.ExpectationSuite(name=suite_name))
+        context.add_or_update_expectation_suite(expectation_suite_name=suite_name)
         
-        # Add expectations using the modern Expectation classes
-        suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="event_id"))
-        suite.add_expectation(gx.expectations.ExpectColumnValuesToBeInSet(
-            column="event_type", 
-            value_set=["view_item", "add_to_cart", "purchase"]
-        ))
-        suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="price", min_value=0))
-        suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="event_timestamp"))
-
-        # 6. Run Validation
-        print("Running validation...")
-        validation_definition_name = "silver_val_def_v4"
-        validation_definition = context.validation_definitions.add(
-            gx.ValidationDefinition(
-                name=validation_definition_name,
-                data=batch_definition,
-                suite=suite
-            )
+        validator = context.get_validator(
+            batch_request=batch_request,
+            expectation_suite_name=suite_name
         )
         
-        # We pass the actual dataframe as a parameter to the run method
-        validation_results = validation_definition.run(batch_parameters={"dataframe": silver_df})
+        # Add Expectations
+        validator.expect_column_values_to_not_be_null(column="event_id")
+        validator.expect_column_values_to_be_in_set(
+            column="event_type", 
+            value_set=["view_item", "add_to_cart", "purchase"]
+        )
+        validator.expect_column_values_to_be_between(column="price", min_value=0)
+        validator.expect_column_values_to_not_be_null(column="event_timestamp")
+        
+        # Save suite to context
+        validator.save_expectation_suite()
 
-        # 7. Report Results
+        # 5. Run Validation via Checkpoint
+        print("Running validation via Checkpoint...")
+        checkpoint = context.add_or_update_checkpoint(
+            name="silver_quality_checkpoint",
+            validations=[
+                {
+                    "batch_request": batch_request,
+                    "expectation_suite_name": suite_name,
+                },
+            ],
+        )
+        
+        checkpoint_result = checkpoint.run()
+
+        # 6. Report Results
         print("\nQuality Report:")
-        for result in validation_results.results:
-            status = "✅ PASS" if result.success else "❌ FAIL"
-            expectation_type = result.expectation_config.type
-            column = result.expectation_config.kwargs.get("column", "N/A")
-            print(f"{status}: {expectation_type} (Column: {column})")
-
-        if validation_results.success:
+        if checkpoint_result.success:
             print("\n🏆 SUCCESS: All quality checks passed!")
         else:
-            print("\n⚠️ WARNING: Some quality checks failed. Check the Silver data for anomalies.")
+            print("\n❌ FAILED: Quality checks failed.")
+            import sys
+            sys.exit(1)
 
     except Exception as e:
         print(f"Error running quality checks: {e}")
         import traceback
         traceback.print_exc()
+        import sys
+        sys.exit(1)
     finally:
         spark.stop()
 

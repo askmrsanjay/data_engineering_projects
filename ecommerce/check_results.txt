@@ -1,0 +1,6 @@
+Reading Bronze table...
+Latest Timestamp: 2026-02-03T18:32:19.446772Z
+
+Record count by date:
+2026-01-26: 8443
+2026-02-03: 5921

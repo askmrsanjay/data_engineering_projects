@@ -76,7 +76,13 @@ ecommerce/
 │   ├── batch/              # Spark Batch jobs
 │   ├── quality/            # Great Expectations suites
 │   └── utils/              # Common helpers
-├── dags/                   # Airflow DAGs
+### Gold Layer (Batch)
+#### [MODIFY] [gold_batch.py](file:///d:/Projects/data_engineering_projects/ecommerce/src/batch/gold_batch.py)
+- **Hourly Sales**: Aggregated by `category` and `hour`.
+- **Top Products**: Aggregated by `product_id`, ranking top sellers by revenue.
+- **User Stats**: Aggregated by `user_id` to track total spend and transaction count.
+- **Exports**: Save all metrics to Iceberg tables AND CSVs for the dashboard.
+
 ├── scripts/                # Setup & utility scripts
 └── tests/                  # Unit and integration tests
 ```
@@ -86,6 +92,14 @@ ecommerce/
 2. **Environment Setup**: Create `docker-compose.yml` to spin up Kafka, Spark, MinIO, and Airflow.
 3. **Event Generator**: Build a Python script to simulate real-time e-commerce events.
 4. **BI Layer**: Develop a Streamlit app to visualize trends from the Gold layer.
+
+### Orchestration (Airflow)
+#### [MODIFY] [docker-compose.yml](file:///d:/Projects/data_engineering_projects/ecommerce/ecommerce_docker/docker-compose.yml)
+- Add `_PIP_ADDITIONAL_REQUIREMENTS="apache-airflow-providers-docker"` to enable DockerOperator.
+
+#### [MODIFY] [ecommerce_dag.py](file:///d:/Projects/data_engineering_projects/ecommerce/dags/ecommerce_dag.py)
+- Use `DockerOperator` to trigger Spark Submit commands.
+- Switch `silver_transformation.py` (Streaming) to `silver_batch.py` (Batch) for scheduled runs.
 
 > [!IMPORTANT]
 > Since we are building this locally, we will use Docker to simulate a distributed environment. Ensure you have Docker Desktop running.

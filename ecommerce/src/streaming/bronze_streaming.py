@@ -59,7 +59,7 @@ def run_bronze_streaming():
         .format("iceberg") \
         .outputMode("append") \
         .trigger(processingTime="10 seconds") \
-        .option("checkpointLocation", "s3a://ecommerce-bucket/checkpoints/bronze_events") \
+        .option("checkpointLocation", "s3a://ecommerce-bucket/checkpoints/bronze_events_v3") \
         .toTable("demo.default.bronze_events")
 
     print("Streaming started... Writing to demo.default.bronze_events")

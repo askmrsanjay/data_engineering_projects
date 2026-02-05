@@ -37,12 +37,11 @@ def run_silver_batch():
         .withColumn("processed_at", current_timestamp()) \
         .dropDuplicates(["event_id"])
 
-    # 3. Write to Silver Table (Iceberg) - Overwrite or Merge
-    # For batch, we often use overwrite for specific partitions or merge
-    # Here, we'll append to demonstrate the flow
+    # 3. Write to Silver Table (Iceberg) - Overwrite to prevent duplicates in Batch Mode
+    # Since we read the entire Bronze table, we must overwrite Silver to maintain consistency.
     silver_df.write \
         .format("iceberg") \
-        .mode("append") \
+        .mode("overwrite") \
         .save("demo.default.silver_events")
 
     print("Silver Batch Transformation Complete.")

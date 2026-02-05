@@ -27,10 +27,12 @@ def run_gold_batch():
     # 1. Read from Silver Table (Batch Mode)
     silver_df = spark.table("demo.default.silver_events")
 
-    # 2. Filter for Sales and Aggregate
-    # For batch, we can use simple group by with date_trunc
-    gold_df = silver_df \
-        .filter(col("event_type") == "purchase") \
+    # Filter for Purchases once
+    purchases_df = silver_df.filter(col("event_type") == "purchase")
+
+    # --- AGGREGATION 1: HOURLY SALES BY CATEGORY ---
+    print("Processing: Hourly Category Sales...")
+    category_sales_df = purchases_df \
         .groupBy(
             date_trunc("hour", col("event_timestamp")).alias("hour_start"),
             col("category")
@@ -41,31 +43,72 @@ def run_gold_batch():
             approx_count_distinct("user_id").alias("unique_buyers")
         ) \
         .withColumn("hour_end", expr("hour_start + interval 1 hour")) \
-        .select(
-            "hour_start",
-            "hour_end",
-            "category",
-            "total_revenue",
-            "total_transactions",
-            "unique_buyers"
-        )
+        .select("hour_start", "hour_end", "category", "total_revenue", "total_transactions", "unique_buyers")
 
-    # 3. Write to Gold Table (Iceberg)
-    gold_df.write \
-        .format("iceberg") \
-        .mode("append") \
-        .save("demo.default.gold_category_sales")
-
-    # 4. EXPORT TO CSV (For Host Dashboard)
-    # We save a copy to the shared volume so Streamlit can read it without Spark
-    print("Exporting Gold results to CSV for dashboard...")
-    pd_gold = gold_df \
+    # Write to Iceberg using SQL CTAS (Safest for Overwrite)
+    category_sales_df.createOrReplaceTempView("tmp_category_sales")
+    spark.sql("""
+        CREATE OR REPLACE TABLE demo.default.gold_category_sales 
+        USING iceberg 
+        AS SELECT * FROM tmp_category_sales
+    """)
+    
+    # Export to CSV
+    category_sales_df \
         .withColumn("hour_start", col("hour_start").cast("string")) \
         .withColumn("hour_end", col("hour_end").cast("string")) \
-        .toPandas()
-    pd_gold.to_csv("/opt/bitnami/spark/app/gold_sales_dashboard.csv", index=False)
+        .toPandas() \
+        .to_csv("/opt/bitnami/spark/app/gold_category_sales.csv", index=False)
 
-    print("Gold Batch Aggregations Complete.")
+
+    # --- AGGREGATION 2: TOP PRODUCTS ---
+    print("Processing: Top Products...")
+    top_products_df = purchases_df \
+        .groupBy("product_id", "category") \
+        .agg(
+            sum("price").alias("total_revenue"),
+            count("event_id").alias("units_sold")
+        ) \
+        .orderBy(col("total_revenue").desc())
+
+    # Write to Iceberg using SQL CTAS (Safest for Overwrite)
+    top_products_df.createOrReplaceTempView("tmp_top_products")
+    spark.sql("""
+        CREATE OR REPLACE TABLE demo.default.gold_top_products 
+        USING iceberg 
+        AS SELECT * FROM tmp_top_products
+    """)
+
+    # Export to CSV (Top 20)
+    top_products_df.limit(20).toPandas() \
+        .to_csv("/opt/bitnami/spark/app/gold_top_products.csv", index=False)
+
+
+    # --- AGGREGATION 3: USER STATS ---
+    print("Processing: User Statistics...")
+    user_stats_df = purchases_df \
+        .groupBy("user_id") \
+        .agg(
+            sum("price").alias("total_spend"),
+            count("event_id").alias("purchase_count"),
+            approx_count_distinct("session_id").alias("session_count")
+        ) \
+        .orderBy(col("total_spend").desc())
+
+    # Write to Iceberg using SQL CTAS
+    user_stats_df.createOrReplaceTempView("tmp_user_stats")
+    spark.sql("""
+        CREATE OR REPLACE TABLE demo.default.gold_user_stats 
+        USING iceberg 
+        AS SELECT * FROM tmp_user_stats
+    """)
+
+    # Export to CSV (Top 20 Spenders)
+    user_stats_df.limit(20).toPandas() \
+        .to_csv("/opt/bitnami/spark/app/gold_user_stats.csv", index=False)
+
+
+    print("Gold Batch Aggregations and Exports Complete.")
     spark.stop()
 
 if __name__ == "__main__":

@@ -6,9 +6,10 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'kafka'
-    static_configs:
-      - targets: ['kafka:9092'] # This assumes JMX exporter if implemented, but we'll use it as a placeholder
+# Kafka metrics would require a JMX exporter. Port 9092 is binary only.
+# - job_name: 'kafka'
+#   static_configs:
+#     - targets: ['kafka:9092']
 
   - job_name: 'spark'
     static_configs:
